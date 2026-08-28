@@ -1,8 +1,13 @@
 #!/bin/sh /etc/rc.common
 # ============================================================
 # CFData-Web 常驻服务 (OpenWrt procd)
-# Cloudflare IP 优选 Web UI, 默认监听 127.0.0.1:13335
+# Cloudflare IP 优选 Web UI, 监听 0.0.0.0:13335 (实测全网卡,
+# 程序日志里的 localhost 仅为显示文案), 局域网可直接访问
 # 崩溃自动拉起 + 开机自启
+#
+# 可选参数: 若存在 /opt/cfdata/ARGS 文件, 其内容作为附加命令行参数
+#   传给程序, 例如: -user admin -password xxxx   (启用 Web 登录认证)
+#   或: -port 13336                              (改端口, 需同步改反代)
 #
 # 安装: cp cfdata.init /etc/init.d/cfdata && chmod +x /etc/init.d/cfdata
 #        /etc/init.d/cfdata enable && /etc/init.d/cfdata start
@@ -15,11 +20,20 @@ START=99
 STOP=10
 
 PROG=/opt/cfdata/cfdata
+ARGS_FILE=/opt/cfdata/ARGS
 
 start_service() {
+    local port
+    # 端口来自 uci: /etc/config/cfdata -> cfdata.main.port (默认 13335)
+    port=$(uci -q get cfdata.main.port 2>/dev/null)
+    [ -z "$port" ] && port=13335
+
     procd_open_instance
     # 主程序 (前台进程, 由 procd 托管)
     procd_set_param command "$PROG"
+    procd_append_param command -port "$port"
+    # 可选附加参数 (ARGS 文件, 空格分隔, 高级用法如 -user/-password)
+    [ -f "$ARGS_FILE" ] && procd_append_param command $(cat "$ARGS_FILE")
     # 崩溃后自动重启: 3600秒内最多重试5次, 每次间隔5秒
     procd_set_param respawn 3600 5 5
     # 工作目录: 配置文件/缓存 (cfdata-config.json, locations.json 等) 存这里

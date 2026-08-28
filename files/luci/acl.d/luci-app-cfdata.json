@@ -14,7 +14,8 @@
 					"start",
 					"stop",
 					"restart",
-					"update"
+					"update",
+					"set_port"
 				]
 			}
 		}

@@ -11,6 +11,8 @@
 #   BRANCH=main          指定分支
 #   SKIP_BIN=1           跳过二进制下载 (仅安装脚本/LuCI)
 #   NO_SERVICE=1         不执行服务操作 (启停/cron/rpcd 重启)
+#   PROXY=nginx          自动配置纯 HTTP 反代 (无 SSL, 需已装 nginx 包)
+#   PROXY_PORT=8080      纯 HTTP 反代端口 (默认 8080, 避开 LuCI 的 80)
 #   CFDATA_DIR=...       覆盖数据目录 (默认 /opt/cfdata, 可用于离线安装测试)
 #   LUCI_RPCD_DIR=...    覆盖 LuCI 后端目录 (默认 /usr/share/rpcd/ucode)
 #   LUCI_ACL_DIR=...     覆盖 ACL 目录 (默认 /usr/share/rpcd/acl.d)
@@ -27,6 +29,11 @@ CFDATA_DIR=${CFDATA_DIR:-/opt/cfdata}
 INIT_SCRIPT=${INIT_SCRIPT:-/etc/init.d/cfdata}
 CRONTAB=${CRONTAB:-/etc/crontabs/root}
 CRON_LINE="0 4 * * * $CFDATA_DIR/cfdata-update.sh >/dev/null 2>&1"
+
+# 反代模式: none = 直连 (默认, 程序监听 0.0.0.0:13335, 局域网直接访问)
+#           nginx = 自动配置纯 HTTP 反代 (无 SSL, 端口默认 8080, 可用 PROXY_PORT 改)
+PROXY=${PROXY:-none}
+PROXY_PORT=${PROXY_PORT:-8080}
 
 LUCI_RPCD_DIR=${LUCI_RPCD_DIR:-/usr/share/rpcd/ucode}
 LUCI_ACL_DIR=${LUCI_ACL_DIR:-/usr/share/rpcd/acl.d}
@@ -127,6 +134,14 @@ say "安装服务脚本..."
 repo_fetch "files/cfdata.init" "$INIT_SCRIPT" || die "下载 cfdata.init 失败"
 chmod +x "$INIT_SCRIPT"
 
+say "初始化配置 (uci)..."
+if [ ! -f /etc/config/cfdata ]; then
+    cat > /etc/config/cfdata <<'EOF' 2>/dev/null || say "WARN: 无法写入 /etc/config/cfdata (端口将使用默认 13335)"
+config cfdata 'main'
+	option port '13335'
+EOF
+fi
+
 if [ "${NO_SERVICE:-0}" != "1" ]; then
     $INIT_SCRIPT enable 2>/dev/null || say "WARN: enable 失败"
     $INIT_SCRIPT start 2>/dev/null || say "WARN: start 失败 (可能已在运行或二进制缺失)"
@@ -161,12 +176,56 @@ else
     say "NO_SERVICE=1, 跳过 rpcd 重启"
 fi
 
+# ---------- 5/5 可选: nginx 纯 HTTP 反代 (无 SSL) ----------
+if [ "$PROXY" = "nginx" ]; then
+    if [ ! -x /etc/init.d/nginx ]; then
+        say "WARN: 未检测到 nginx, 请先 opkg install nginx; 或去掉 PROXY=nginx 用直连模式"
+    elif [ "${NO_SERVICE:-0}" = "1" ]; then
+        say "NO_SERVICE=1, 跳过 nginx 配置"
+    else
+        say "配置 nginx 纯 HTTP 反代 (端口 $PROXY_PORT)..."
+        mkdir -p /etc/nginx/conf.d
+        cat > /etc/nginx/conf.d/cfdata.proxy <<'EOF'
+location / {
+    proxy_pass http://127.0.0.1:13335;
+
+    client_max_body_size 10m;   # 上传 IP 列表文件用, 默认 1m 会 413
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto http;
+
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_buffering off;        # 扫描进度流式输出
+    proxy_read_timeout 1h;      # 长任务防断
+    proxy_send_timeout 1h;
+}
+EOF
+        uci -q delete nginx.cfdata
+        uci set nginx.cfdata=server
+        uci set nginx.cfdata.listen="0.0.0.0:$PROXY_PORT"
+        uci set nginx.cfdata.server_name='_'
+        uci set nginx.cfdata.include='conf.d/cfdata.proxy'
+        uci set nginx.cfdata.access_log='off; # logd openwrt'
+        uci commit nginx
+        /etc/init.d/nginx restart 2>/dev/null || say "WARN: nginx 重启失败, 检查 /etc/nginx/nginx.conf"
+        say "HTTP 反代已配置"
+    fi
+fi
+
 say "=============================================="
 say "部署完成!"
 say "  LuCI 页面:  服务 -> CFData-Web"
-say "  本机入口:   http://127.0.0.1:13335  (nginx 反代用)"
+say "  局域网直连: http://$(uci -q get network.lan.ipaddr 2>/dev/null || echo '<路由器IP>'):13335"
 say "  手动更新:   $CFDATA_DIR/cfdata-update.sh --force"
 say "  服务控制:   $INIT_SCRIPT {start|stop|restart|status}"
 say "  运行日志:   logread -e cfdata"
 say "  更新日志:   tail -f $CFDATA_DIR/update.log"
+if [ "$PROXY" = "nginx" ]; then
+    say "  HTTP 反代: http://$(uci -q get network.lan.ipaddr 2>/dev/null || echo '<路由器IP>'):$PROXY_PORT"
+fi
 say "=============================================="

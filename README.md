@@ -4,7 +4,7 @@
 
 - 🔄 每日 4:00 自动检查 GitHub 最新 Release，下载 → sha256 校验 → 原子替换 → 重启
 - 🛡️ procd 常驻服务：崩溃自动拉起、开机自启
-- 🌐 LuCI 网页：服务开关（启动/停止/重启）、一键检查更新、查看版本与日志
+- 🌐 LuCI 网页：服务开关（启动/停止/重启）、一键检查更新、**访问链接直达**、**端口在线修改**、版本与日志
 - 🇨🇳 国内网络友好：下载带多镜像回退（直连 → jsDelivr → ghproxy）
 
 ## 一键部署
@@ -26,7 +26,24 @@ sh /tmp/install.sh
 装完：
 
 - **LuCI** → 服务 → **CFData-Web** 即可控制
-- 服务本机入口 `http://127.0.0.1:13335`（建议用 nginx 反代对外）
+- 局域网直连 `http://<路由器IP>:13335`（详见下方"访问方式"）
+
+## 访问方式
+
+程序**实测监听所有网卡**（`0.0.0.0:13335`，日志里的 localhost 只是显示文案），所以：
+
+- **局域网直连（默认，零配置）**：`http://<路由器IP>:13335`
+- **纯 HTTP 反代（无 SSL）**：`PROXY=nginx` 安装时自动配置，或手动：
+  ```sh
+  opkg install nginx
+  wget -O- https://raw.githubusercontent.com/smilekevin/CFData-WEB-openwrt/main/install.sh | PROXY=nginx sh
+  ```
+  反代端口默认 8080（`PROXY_PORT` 可改），避免和 LuCI 的 80 冲突。
+- **HTTPS 反代**：见下方 nginx 示例（证书自备，或 Tailscale 免费证书）。
+
+> ⚠️ 安全提醒：程序默认**无登录认证**。仅限局域网/内网使用时直连即可；
+> 若要暴露到公网，务必启用认证（`echo '-user admin -password 你的密码' > /opt/cfdata/ARGS` 后
+> `/etc/init.d/cfdata restart`）或走 VPN/Tailscale，别裸奔。
 
 ### nginx 反代示例
 
@@ -76,6 +93,15 @@ location / {
 /etc/init.d/cfdata {start|stop|restart|status}
 /etc/init.d/cfdata enable     # 开机自启 (安装时已启用)
 
+# 端口配置 (uci, 默认 13335; 也可在 LuCI 页面直接改)
+uci set cfdata.main.port=13336
+uci commit cfdata
+/etc/init.d/cfdata restart
+
+# 高级参数: 写入 /opt/cfdata/ARGS (如启用认证)
+echo '-user admin -password 你的密码' > /opt/cfdata/ARGS
+/etc/init.d/cfdata restart
+
 # 手动检查更新 (--force 忽略版本记录强制重下)
 /opt/cfdata/cfdata-update.sh --force
 
@@ -103,10 +129,12 @@ sh uninstall.sh --purge  # 连数据一起删
 | `BRANCH` | `main` | 指定部署分支 |
 | `SKIP_BIN` | - | `1` = 跳过二进制下载 |
 | `NO_SERVICE` | - | `1` = 不执行启停/cron/rpcd 重启（离线预装场景） |
+| `PROXY` | `none` | `nginx` = 自动配置纯 HTTP 反代（无 SSL，端口见 `PROXY_PORT`） |
+| `PROXY_PORT` | `8080` | 纯 HTTP 反代监听端口 |
 | `CFDATA_DIR` 等 | 见上表 | 覆盖安装路径 |
 
 ## 备注
 
+- 服务监听 `0.0.0.0:13335`（实测），局域网默认可达；公网暴露请先启用认证或走 VPN。
 - 安装后 rpcd 会重启以注册 ubus 对象与 ACL，LuCI 若被登出重新登录一次即可。
-- 服务默认监听 `127.0.0.1:13335`；若发现监听在 `0.0.0.0`（`netstat -tlnp | grep 13335`），建议在防火墙限制 13335 端口仅本机访问，避免绕过 nginx 直连。
 - 免责声明：CFData-Web 仅限学习研究用途，请遵守当地法律法规。
