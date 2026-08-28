@@ -1,0 +1,6 @@
+# CFData-Web 运行时文件 (二进制在 /opt/cfdata, 这些是本地测试残留)
+cfdata-config.json
+locations.json
+ips-*.txt
+ip.csv
+*.bak
