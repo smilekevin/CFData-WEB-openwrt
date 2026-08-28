@@ -30,47 +30,13 @@ sh /tmp/install.sh
 
 ## 访问方式
 
-程序**实测监听所有网卡**（`0.0.0.0:13335`，日志里的 localhost 只是显示文案），所以：
+程序**实测监听所有网卡**（`0.0.0.0:13335`，日志里的 localhost 只是显示文案），局域网设备直接访问：
 
 - **局域网直连（默认，零配置）**：`http://<路由器IP>:13335`
-- **纯 HTTP 反代（无 SSL）**：`PROXY=nginx` 安装时自动配置，或手动：
-  ```sh
-  opkg install nginx
-  wget -O- https://raw.githubusercontent.com/smilekevin/CFData-WEB-openwrt/main/install.sh | PROXY=nginx sh
-  ```
-  反代端口默认 8080（`PROXY_PORT` 可改），避免和 LuCI 的 80 冲突。
-- **HTTPS 反代**：见下方 nginx 示例（证书自备，或 Tailscale 免费证书）。
 
 > ⚠️ 安全提醒：程序默认**无登录认证**。仅限局域网/内网使用时直连即可；
 > 若要暴露到公网，务必启用认证（`echo '-user admin -password 你的密码' > /opt/cfdata/ARGS` 后
 > `/etc/init.d/cfdata restart`）或走 VPN/Tailscale，别裸奔。
-
-### nginx 反代示例
-
-OpenWrt nginx 包（uci 方式）：`uci set nginx.cfdata=server` 配置监听/证书后，把下面内容存为 `/etc/nginx/conf.d/cfdata.proxy`：
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:13335;
-
-    client_max_body_size 10m;   # 上传 IP 列表文件用, 默认 1m 会 413
-
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto https;
-
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-
-    proxy_buffering off;        # 扫描进度流式输出
-    proxy_read_timeout 1h;      # 长任务防断
-    proxy_send_timeout 1h;
-}
-```
-
-若用 Tailscale 证书反代：`tailscale cert` 签发的证书 90 天过期，需定期续期并 `service nginx reload`。
 
 ## 安装内容
 
@@ -129,8 +95,6 @@ sh uninstall.sh --purge  # 连数据一起删
 | `BRANCH` | `main` | 指定部署分支 |
 | `SKIP_BIN` | - | `1` = 跳过二进制下载 |
 | `NO_SERVICE` | - | `1` = 不执行启停/cron/rpcd 重启（离线预装场景） |
-| `PROXY` | `none` | `nginx` = 自动配置纯 HTTP 反代（无 SSL，端口见 `PROXY_PORT`） |
-| `PROXY_PORT` | `8080` | 纯 HTTP 反代监听端口 |
 | `CFDATA_DIR` 等 | 见上表 | 覆盖安装路径 |
 
 ## 备注
