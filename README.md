@@ -26,7 +26,34 @@ sh /tmp/install.sh
 装完：
 
 - **LuCI** → 服务 → **CFData-Web** 即可控制
-- 服务本机入口 `http://127.0.0.1:13335`（建议用 nginx 反代对外，如 `proxy_pass http://127.0.0.1:13335;`）
+- 服务本机入口 `http://127.0.0.1:13335`（建议用 nginx 反代对外）
+
+### nginx 反代示例
+
+OpenWrt nginx 包（uci 方式）：`uci set nginx.cfdata=server` 配置监听/证书后，把下面内容存为 `/etc/nginx/conf.d/cfdata.proxy`：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:13335;
+
+    client_max_body_size 10m;   # 上传 IP 列表文件用, 默认 1m 会 413
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_buffering off;        # 扫描进度流式输出
+    proxy_read_timeout 1h;      # 长任务防断
+    proxy_send_timeout 1h;
+}
+```
+
+若用 Tailscale 证书反代：`tailscale cert` 签发的证书 90 天过期，需定期续期并 `service nginx reload`。
 
 ## 安装内容
 
