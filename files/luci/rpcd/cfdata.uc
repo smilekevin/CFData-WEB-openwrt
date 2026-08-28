@@ -8,9 +8,12 @@
  *   方法: status / start / stop / restart / update
  * 安装后需重启 rpcd: /etc/init.d/rpcd restart
  *
- * 注意: shell 调用写法与 luci-app-tailscale-community 的
- * tailscale.uc 保持一致 (fs.popen + read('line') 循环),
- * 不依赖新版 ucode 才支持的 read('all')。
+ * 兼容性注意 (踩坑记录):
+ * - shell 调用: fs.popen + read('line') 循环 (tailscale.uc 同款)
+ * - ucode 数组没有 .push(), 字符串没有 .length 属性
+ *   -> 一律用全局 length() 和字符串拼接
+ * - 不用 sprintf, 直接 'str' + value 拼接
+ * - 所有可能抛错的地方都 try/catch, 错误转成 errors 字段返回
  */
 
 import { popen } from 'fs';
@@ -21,21 +24,28 @@ const VERSION_FILE = CFDATA_DIR + '/VERSION';
 const LATEST_FILE  = CFDATA_DIR + '/LATEST';
 const LOG_FILE     = CFDATA_DIR + '/update.log';
 
-/* 执行 shell 命令并捕获 stdout+stderr */
+/* 执行 shell 命令并捕获 stdout+stderr, 任何异常都转成返回值 */
 function run(cmd) {
-    let p = popen(cmd + ' 2>&1', 'r');
-    sleep(100);
-
-    if (p == null)
-        return { ok: false, output: '执行失败: ' + cmd };
-
     let out = '';
-    for (let line = p.read('line'); length(line); line = p.read('line'))
-        out += line;
+    let code = -1;
 
-    let code = p.close() || 0;
+    try {
+        let p = popen(cmd + ' 2>&1', 'r');
+        sleep(100);
 
-    return { ok: (code == 0), output: rtrim(out) };
+        if (p == null)
+            return { ok: false, output: '执行失败: ' + cmd };
+
+        for (let line = p.read('line'); length(line); line = p.read('line'))
+            out += line;
+
+        code = p.close() || 0;
+    }
+    catch (e) {
+        return { ok: false, output: '命令异常: ' + e };
+    }
+
+    return { ok: (code == 0), output: out };
 }
 
 /* 只取输出 */
@@ -43,14 +53,14 @@ function sh(cmd) {
     return run(cmd).output;
 }
 
-/* 读文件第一行 (trim 掉换行) */
+/* 读文件第一行 */
 function read_first_line(path) {
     return trim(sh('head -n1 ' + path + ' 2>/dev/null'));
 }
 
 /* 是否在运行 */
 function is_running() {
-    return sh('pidof cfdata 2>/dev/null').length > 0;
+    return length(sh('pidof cfdata 2>/dev/null')) > 0;
 }
 
 function status() {
@@ -62,28 +72,25 @@ function status() {
         log:     '',
         errors:  ''
     };
-    let errs = [];
+    let errs = '';
 
     try { res.running = is_running(); }
-    catch (e) { errs.push('running: ' + sprintf('%s', e)); }
+    catch (e) { errs += 'running: ' + e + ' | '; }
 
     try { res.version = read_first_line(VERSION_FILE); }
-    catch (e) { errs.push('version: ' + sprintf('%s', e)); }
+    catch (e) { errs += 'version: ' + e + ' | '; }
 
     try { res.latest = read_first_line(LATEST_FILE); }
-    catch (e) { errs.push('latest: ' + sprintf('%s', e)); }
+    catch (e) { errs += 'latest: ' + e + ' | '; }
 
-    try { res.enabled = sh('ls -d /etc/rc.d/S*cfdata 2>/dev/null').length > 0; }
-    catch (e) { errs.push('enabled: ' + sprintf('%s', e)); }
+    try { res.enabled = length(sh('ls -d /etc/rc.d/S*cfdata 2>/dev/null')) > 0; }
+    catch (e) { errs += 'enabled: ' + e + ' | '; }
 
     try { res.log = sh('tail -n 25 ' + LOG_FILE + ' 2>/dev/null'); }
-    catch (e) { errs.push('log: ' + sprintf('%s', e)); }
+    catch (e) { errs += 'log: ' + e + ' | '; }
 
-    if (length(errs)) {
-        res.errors = errs[0];
-        for (let i = 1; i < length(errs); i++)
-            res.errors += ' | ' + errs[i];
-    }
+    if (length(errs) > 0)
+        res.errors = errs;
 
     return res;
 }
