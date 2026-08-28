@@ -4,7 +4,7 @@
 var callStatus = rpc.declare({
 	object: 'cfdata',
 	method: 'status',
-	expect: { running: false, version: '', latest: '', enabled: false, log: '' }
+	expect: { running: false, version: '', latest: '', enabled: false, log: '', errors: '' }
 });
 
 var callStart   = rpc.declare({ object: 'cfdata', method: 'start',   expect: { ok: false, output: '' } });
@@ -109,8 +109,12 @@ return L.view.extend({
 			self.latestEl.textContent = (res && res.latest) || '-';
 			self.enabledEl.textContent = (res && res.enabled) ? '已启用' : '未启用';
 			self.logEl.value = (res && res.log) || '(暂无更新日志)';
+
+			if (res && res.errors)
+				self.resultEl.textContent = '⚠️ 后端错误: ' + res.errors;
 		}).catch(function(e) {
 			self.statusEl.textContent = '状态获取失败';
+			self.resultEl.textContent = 'RPC 调用失败: ' + (e && e.message ? e.message : e);
 		});
 
 		/* 每 5 秒自动刷新, 页面离开后自动停止 */
