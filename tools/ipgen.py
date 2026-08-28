@@ -64,6 +64,7 @@ def main():
 
     out = sys.stdout if args.output == '-' else open(args.output, 'w')
     count = 0
+    v6warned = False
     try:
         with open(args.input) as f:
             for line in f:
@@ -83,7 +84,13 @@ def main():
                         sys.stderr.write(f"[ipgen] 警告: {net} 共 {net.num_addresses} 个地址过大, 跳过 (改用 -n 抽样)\n")
                         continue
                 for ip in ips:
-                    out.write(f"{ip}:{args.port}\n" if args.port else f"{ip}\n")
+                    if args.port and ip.version == 6:
+                        if not v6warned:
+                            sys.stderr.write("[ipgen] 警告: v6 地址忽略 -p 端口 (CFData-Web nsb 解析器不支持 v6 显式端口), 输出裸地址, 默认端口由 nsbtls 决定\n")
+                            v6warned = True
+                        out.write(str(ip) + '\n')
+                    else:
+                        out.write(f"{ip}:{args.port}\n" if args.port else f"{ip}\n")
                     count += 1
     finally:
         if out is not sys.stdout:
