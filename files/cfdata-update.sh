@@ -127,6 +127,9 @@ chmod +x "$BIN_FILE"
 echo "$TAG" > "$VERSION_FILE"
 log "部署完成: $BIN_FILE ($TAG)"
 
+# 保持数据目录属主为专用用户 cfdata (若启用了 OpenClash 绕行 BYPASS_PROXY)
+grep -q '^cfdata:' /etc/passwd 2>/dev/null && chown -R cfdata:cfdata "$CFDATA_DIR" 2>/dev/null
+
 # ---------- 重启服务 ----------
 if [ -x /etc/init.d/cfdata ]; then
     /etc/init.d/cfdata restart 2>/dev/null && log "服务已重启" \
