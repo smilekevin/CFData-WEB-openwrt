@@ -13,6 +13,7 @@
 #   NO_SERVICE=1         不执行服务操作 (启停/cron/rpcd 重启)
 #   PROXY=nginx          自动配置纯 HTTP 反代 (无 SSL, 需已装 nginx 包)
 #   PROXY_PORT=8080      纯 HTTP 反代端口 (默认 8080, 避开 LuCI 的 80)
+#   BYPASS_PROXY=1       创建专用用户 cfdata (uid 1010), 配合 OpenClash 黑白名单按用户过滤
 #   CFDATA_DIR=...       覆盖数据目录 (默认 /opt/cfdata, 可用于离线安装测试)
 #   LUCI_RPCD_DIR=...    覆盖 LuCI 后端目录 (默认 /usr/share/rpcd/ucode)
 #   LUCI_ACL_DIR=...     覆盖 ACL 目录 (默认 /usr/share/rpcd/acl.d)
@@ -34,6 +35,10 @@ CRON_LINE="0 4 * * * $CFDATA_DIR/cfdata-update.sh >/dev/null 2>&1"
 #           nginx = 自动配置纯 HTTP 反代 (无 SSL, 端口默认 8080, 可用 PROXY_PORT 改)
 PROXY=${PROXY:-none}
 PROXY_PORT=${PROXY_PORT:-8080}
+
+# 绕过 OpenClash 代理: 1 (默认) = 创建专用用户 cfdata (uid 1010), 服务以该用户运行;
+# 在 OpenClash 的黑白名单/流量绕过中按用户 cfdata 过滤, 即可让服务直连 WAN 不走代理
+BYPASS_PROXY=${BYPASS_PROXY:-1}
 
 LUCI_RPCD_DIR=${LUCI_RPCD_DIR:-/usr/share/rpcd/ucode}
 LUCI_ACL_DIR=${LUCI_ACL_DIR:-/usr/share/rpcd/acl.d}
@@ -123,6 +128,26 @@ if [ "${SKIP_BIN:-0}" != "1" ]; then
         echo "$TAG" > "$CFDATA_DIR/LATEST"
         say "二进制就绪: $CFDATA_DIR/cfdata ($TAG)"
     fi
+fi
+
+# ---------- 1.5 可选: OpenClash 绕过 (BYPASS_PROXY=1, 默认开启) ----------
+# 创建专用用户 cfdata (uid 1010): 配合 OpenClash 的黑白名单/流量绕过功能,
+# 在 OpenClash 中按用户 cfdata 过滤, 即可让服务流量直连 WAN、不进入代理链路
+if [ "$BYPASS_PROXY" = "1" ]; then
+    say "创建专用用户 cfdata (uid 1010)..."
+    UID_CFDATA=1010
+    if ! grep -q '^cfdata:' /etc/passwd 2>/dev/null; then
+        echo "cfdata:x:$UID_CFDATA:$UID_CFDATA:cfdata:$CFDATA_DIR:/bin/false" >> /etc/passwd
+        grep -q "^cfdata:" /etc/group 2>/dev/null || echo "cfdata:x:$UID_CFDATA:" >> /etc/group
+        grep -q '^cfdata:' /etc/shadow 2>/dev/null || echo "cfdata:!:19000:0:99999:7:::" >> /etc/shadow
+        say "用户 cfdata 已创建 (uid $UID_CFDATA)"
+    else
+        say "用户 cfdata 已存在"
+    fi
+    chown -R cfdata:cfdata "$CFDATA_DIR" 2>/dev/null
+    say "提示: 如需绕行 OpenClash, 请在 OpenClash 流量绕过/黑白名单中按用户 cfdata (UID $UID_CFDATA) 过滤"
+else
+    say "BYPASS_PROXY=0, 不创建专用用户 (服务以 root 运行)"
 fi
 
 # ---------- 2/4 安装更新脚本 + 服务脚本 ----------

@@ -50,7 +50,21 @@ sh /tmp/install.sh
 | `files/luci/htdocs/cfdata/status.js` | `/www/luci-static/resources/view/cfdata/` | 前端页面 |
 | 二进制 | `/opt/cfdata/cfdata` | 当前版本（上一版备份为 `cfdata.bak`） |
 
-其他：`/etc/crontabs/root` 添加每日 4:00 更新任务；配置/缓存（`cfdata-config.json`、`locations.json` 等）存于 `/opt/cfdata/`。
+其他：`/etc/crontabs/root` 添加每日 4:00 更新任务；配置/缓存（`cfdata-config.json`、`locations.json` 等）存于 `/opt/cfdata/`；默认（`BYPASS_PROXY=1`）创建专用用户 `cfdata`（UID 1010），服务以该用户运行，供 OpenClash 黑白名单按用户过滤。
+
+## OpenClash 绕行（可选）
+
+路由器若装有 OpenClash，想让 CFData-Web 的流量**直连 WAN、不进入代理链路**（扫描/下载/更新检查更稳定、不受代理规则影响），用 OpenClash 的黑白名单/流量绕过功能按**用户**过滤即可：
+
+1. 安装脚本（默认 `BYPASS_PROXY=1`）已创建专用用户 `cfdata`（UID `1010`），服务以该用户运行
+2. 打开 OpenClash → **流量绕过 / 黑白名单 / 自定义规则**相关设置
+3. 按用户 UID 添加过滤：`1010`（或用户名 `cfdata`）
+4. 保存并重启 OpenClash
+
+之后 `cfdata` 的所有请求（DNS、IP 优选扫描、更新检查）都被 OpenClash 放行直连，完全不经过 TUN/代理。验证：Clash 控制台「连接」页不再出现 `cfdata` 进程的连接。
+
+关闭此功能：`BYPASS_PROXY=0` 重新安装（不创建用户，服务以 root 运行），或删除用户：
+`sed -i '/^cfdata:/d' /etc/passwd /etc/group /etc/shadow`
 
 ## 手动操作
 
@@ -95,6 +109,7 @@ sh uninstall.sh --purge  # 连数据一起删
 | `BRANCH` | `main` | 指定部署分支 |
 | `SKIP_BIN` | - | `1` = 跳过二进制下载 |
 | `NO_SERVICE` | - | `1` = 不执行启停/cron/rpcd 重启（离线预装场景） |
+| `BYPASS_PROXY` | `1` | `1` = 创建专用用户 cfdata（UID 1010）供 OpenClash 黑白名单过滤；`0` = 不创建（root 运行） |
 | `CFDATA_DIR` 等 | 见上表 | 覆盖安装路径 |
 
 ## 备注
