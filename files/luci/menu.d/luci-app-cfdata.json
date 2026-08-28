@@ -1,0 +1,15 @@
+{
+	"admin/services/cfdata": {
+		"title": "CFData-Web",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "cfdata/status"
+		},
+		"depends": {
+			"acl": [
+				"luci-app-cfdata"
+			]
+		}
+	}
+}

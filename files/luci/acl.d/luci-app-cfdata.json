@@ -1,0 +1,22 @@
+{
+	"luci-app-cfdata": {
+		"description": "Grant access to CFData-Web service control",
+		"read": {
+			"ubus": {
+				"cfdata": [
+					"status"
+				]
+			}
+		},
+		"write": {
+			"ubus": {
+				"cfdata": [
+					"start",
+					"stop",
+					"restart",
+					"update"
+				]
+			}
+		}
+	}
+}

@@ -1,0 +1,85 @@
+# CFData-WEB-openwrt
+
+[CFData-Web](https://github.com/PoemMisty/CFData-WEB) 在 OpenWrt 路由器上的一键部署方案：**自动更新 + 常驻服务 + LuCI 网页控制**。
+
+- 🔄 每日 4:00 自动检查 GitHub 最新 Release，下载 → sha256 校验 → 原子替换 → 重启
+- 🛡️ procd 常驻服务：崩溃自动拉起、开机自启
+- 🌐 LuCI 网页：服务开关（启动/停止/重启）、一键检查更新、查看版本与日志
+- 🇨🇳 国内网络友好：下载带多镜像回退（直连 → jsDelivr → ghproxy）
+
+## 一键部署
+
+在路由器上执行（任选其一）：
+
+```sh
+# 直连 GitHub
+wget -O- https://raw.githubusercontent.com/smilekevin/CFData-WEB-openwrt/main/install.sh | sh
+
+# 国内镜像 (jsDelivr)
+wget -O- https://cdn.jsdelivr.net/gh/smilekevin/CFData-WEB-openwrt@main/install.sh | sh
+
+# 或先下载再执行 (便于看错误输出)
+wget -O /tmp/install.sh https://raw.githubusercontent.com/smilekevin/CFData-WEB-openwrt/main/install.sh
+sh /tmp/install.sh
+```
+
+装完：
+
+- **LuCI** → 服务 → **CFData-Web** 即可控制
+- 服务本机入口 `http://127.0.0.1:13335`（建议用 nginx 反代对外，如 `proxy_pass http://127.0.0.1:13335;`）
+
+## 安装内容
+
+| 文件 | 安装位置 | 说明 |
+|---|---|---|
+| `files/cfdata-update.sh` | `/opt/cfdata/cfdata-update.sh` | 自动更新器（含镜像链） |
+| `files/cfdata.init` | `/etc/init.d/cfdata` | procd 常驻服务 |
+| `files/luci/rpcd/cfdata.uc` | `/usr/share/rpcd/ucode/cfdata.uc` | LuCI 后端（ubus 对象 `cfdata`） |
+| `files/luci/acl.d/luci-app-cfdata.json` | `/usr/share/rpcd/acl.d/` | 权限控制 |
+| `files/luci/menu.d/luci-app-cfdata.json` | `/usr/share/luci/menu.d/` | 菜单入口 |
+| `files/luci/htdocs/cfdata/status.js` | `/www/luci-static/resources/view/cfdata/` | 前端页面 |
+| 二进制 | `/opt/cfdata/cfdata` | 当前版本（上一版备份为 `cfdata.bak`） |
+
+其他：`/etc/crontabs/root` 添加每日 4:00 更新任务；配置/缓存（`cfdata-config.json`、`locations.json` 等）存于 `/opt/cfdata/`。
+
+## 手动操作
+
+```sh
+# 服务控制
+/etc/init.d/cfdata {start|stop|restart|status}
+/etc/init.d/cfdata enable     # 开机自启 (安装时已启用)
+
+# 手动检查更新 (--force 忽略版本记录强制重下)
+/opt/cfdata/cfdata-update.sh --force
+
+# 日志
+logread -e cfdata                       # 服务运行日志
+tail -f /opt/cfdata/update.log          # 更新日志
+```
+
+## 卸载
+
+```sh
+sh uninstall.sh          # 保留 /opt/cfdata 数据
+sh uninstall.sh --purge  # 连数据一起删
+```
+
+## 架构支持
+
+- aarch64/arm64 → `cfdata-linux-arm64`（多数软路由/ARM 路由器）
+- x86_64/amd64 → `cfdata-linux-amd64`
+
+## 环境变量（可选）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `BRANCH` | `main` | 指定部署分支 |
+| `SKIP_BIN` | - | `1` = 跳过二进制下载 |
+| `NO_SERVICE` | - | `1` = 不执行启停/cron/rpcd 重启（离线预装场景） |
+| `CFDATA_DIR` 等 | 见上表 | 覆盖安装路径 |
+
+## 备注
+
+- 安装后 rpcd 会重启以注册 ubus 对象与 ACL，LuCI 若被登出重新登录一次即可。
+- 服务默认监听 `127.0.0.1:13335`；若发现监听在 `0.0.0.0`（`netstat -tlnp | grep 13335`），建议在防火墙限制 13335 端口仅本机访问，避免绕过 nginx 直连。
+- 免责声明：CFData-Web 仅限学习研究用途，请遵守当地法律法规。
