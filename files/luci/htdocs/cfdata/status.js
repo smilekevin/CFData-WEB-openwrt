@@ -4,13 +4,14 @@
 var callStatus = rpc.declare({
 	object: 'cfdata',
 	method: 'status',
-	expect: { running: false, version: '', latest: '', enabled: false, log: '', errors: '' }
+	reject: true,
+	expect: { '': {} }
 });
 
-var callStart   = rpc.declare({ object: 'cfdata', method: 'start',   expect: { ok: false, output: '' } });
-var callStop    = rpc.declare({ object: 'cfdata', method: 'stop',    expect: { ok: false, output: '' } });
-var callRestart = rpc.declare({ object: 'cfdata', method: 'restart', expect: { ok: false, output: '' } });
-var callUpdate  = rpc.declare({ object: 'cfdata', method: 'update',  expect: { ok: false, output: '' } });
+var callStart   = rpc.declare({ object: 'cfdata', method: 'start',   reject: true, expect: { '': {} } });
+var callStop    = rpc.declare({ object: 'cfdata', method: 'stop',    reject: true, expect: { '': {} } });
+var callRestart = rpc.declare({ object: 'cfdata', method: 'restart', reject: true, expect: { '': {} } });
+var callUpdate  = rpc.declare({ object: 'cfdata', method: 'update',  reject: true, expect: { '': {} } });
 
 function actionBtn(name, label, cls, handler) {
 	return E('button', {
