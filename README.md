@@ -90,6 +90,23 @@ logread -e cfdata                       # 服务运行日志
 tail -f /opt/cfdata/update.log          # 更新日志
 ```
 
+## IP 生成器（自定义网段 → 扫描列表）
+
+自带 `tools/ipgen.py`（Python 3，本机或任何电脑上跑），把第三方 CIDR 网段展开/抽样成 IP 列表，配合两种喂法：
+
+```sh
+# ① 喂 nsb 非标模式: 展开或抽样成具体 IP (可带端口)
+python3 tools/ipgen.py 网段.txt -o ip.txt -n 200        # 每网段随机抽 200 个
+python3 tools/ipgen.py 网段.txt -o ip.txt -p 443        # 全量展开 + 追加 :443
+
+# ② 替换官方列表 (官方模式直接扫你的网段, 每 /24 随机抽测)
+python3 tools/ipgen.py 网段.txt -o sub24.txt --sub24    # v4 拆成 /24 粒度
+# 备份后覆盖 /opt/cfdata/ips-v4.txt (v6 同理写 ips-v6.txt)
+```
+
+输入格式：每行一个 CIDR（`103.21.244.0/22`、`2606:4700::/64`），支持注释/空行/裸 IP。
+注意：nsb 模式不认 CIDR（只认 IP:端口/域名）；大网段用 `-n` 抽样（全量展开 v4 限 65536、v6 限 4096 个地址）。
+
 ## 卸载
 
 ```sh
