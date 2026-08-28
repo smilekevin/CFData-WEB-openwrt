@@ -113,6 +113,7 @@ if [ "${SKIP_BIN:-0}" != "1" ]; then
         [ -f "$CFDATA_DIR/cfdata" ] && mv -f "$CFDATA_DIR/cfdata" "$CFDATA_DIR/cfdata.bak"
         mv /tmp/cfdata-bin "$CFDATA_DIR/cfdata"
         echo "$TAG" > "$CFDATA_DIR/VERSION"
+        echo "$TAG" > "$CFDATA_DIR/LATEST"
         say "二进制就绪: $CFDATA_DIR/cfdata ($TAG)"
     fi
 fi

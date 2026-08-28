@@ -24,13 +24,13 @@ const VERSION_FILE = CFDATA_DIR + '/VERSION';
 const LATEST_FILE  = CFDATA_DIR + '/LATEST';
 const LOG_FILE     = CFDATA_DIR + '/update.log';
 
-/* 执行 shell 命令并捕获 stdout+stderr, 任何异常都转成返回值 */
+/* 执行 shell 命令并捕获 stdout (stderr 重定向由调用方自行处理), 任何异常都转成返回值 */
 function run(cmd) {
     let out = '';
     let code = -1;
 
     try {
-        let p = popen(cmd + ' 2>&1', 'r');
+        let p = popen(cmd, 'r');
         sleep(100);
 
         if (p == null)
@@ -96,7 +96,7 @@ function status() {
 }
 
 function action(name) {
-    return run(INIT_SCRIPT + ' ' + name);
+    return run(INIT_SCRIPT + ' ' + name + ' 2>&1');
 }
 
 function trigger_update() {
